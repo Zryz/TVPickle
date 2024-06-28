@@ -1,15 +1,11 @@
 from pathlib import Path
-from ui import Menu, Banner, Title
+import os
+#from ui import Menu, Banner, Text
 
-API_KEY = 'ba11c5aff22acaf0909a2e054360c25c'
 BASE_URL = 'https://api.themoviedb.org/3/'
 CORE_DATA = ['title', 'release_date', 'vote_average', 'genre_ids']
 STACK_LIMIT = 30
-
-#API CACHE LOCATIONS
-api_cache = Path('./cache/search_history.json')
-api_genres = Path('./cache/genres.json')
-
+ 
 #HELPER FUNCTIONS
 
 def isiter(l)-> bool:
@@ -33,16 +29,16 @@ PROGRAM_PAGES = ('modePage', 'searchPage', 'resultsPage', 'configPage')
 #UIElement arguments
 UI_KARGS = {
     'coreElements':{
-        'footer':{'menuData':{'end':''}},
+        'footer':{'UIMenu':{'end':''}},
     }
 }
 
 #Specify the Menu options for the pages of the app.
 MENU_DATA = {
-    'dictName':'menuData',
+    'uiElement':'UIMenu',
     'coreElements':{
-    'footer':{'Q!':'Quit', 'R!':'Reset'}
-        },
+        'footer':{'Q!':'Quit', 'R!':'Reset'}
+            },
     'modePage':{
         'body':{'M':'Movie','T':'TV'}
         },
@@ -53,19 +49,20 @@ MENU_DATA = {
         'header':{'+':'Next Page','-':'Previous Page'}}       
 }
 
-#Define the text used within any UITitle elements
+#Define the text used within any UIText elements
 TITLE_DATA = {
-    'dictName':'titleData',
+    'uiElement':'UIText',
     'coreElements':{
         'header':'TV Pickle'
     },          
     'modePage':{
         'header':'TV Mode Selection',
-        'page':'Please choose a mode to search for content.\n. Use M: for Movies or T: for TV.'
+        'body':'Please choose a mode to search for content',
+        'body':'Use M: for Movies or T: for TV'
     },
     'searchPage':{
         'header':'Search Mode Page',
-        'page':'Please enter criteria to use for searching against.'
+        'body':'Please enter criteria to use for searching against.'
     },
     'resultsPage':{
         'header':'Search Results'
@@ -74,17 +71,17 @@ TITLE_DATA = {
 
 #Define what UI Elements need to be represented as a Banner
 BANNER_MAP = {
-    'dictName':'bannerMap',
+    'uiElement':'UIBanner',
     'coreElements':{
-        'header':'UITitle',
+        'header':'UIText',
         'footer':'UIMenu'
         },
     'modePage':{
-        'header':'UITitle',
+        'header':'UIText',
         },
     'searchPage':{
-        'header':{'UIBanner':'UITitle'},
-        'body':['UITitle', 'UIMenu']
+        'header':'UIText',
+        'body':['UIText', 'UIMenu']
         }
 }
 
