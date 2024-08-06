@@ -1,9 +1,6 @@
-import json
-import pycurl
-import certifi
-import os
-from io import BytesIO
+import json, os, api
 from urllib.parse import urlencode
+
 
 #URL Helpers
 DEFAULTS = {'include_adult':'false', 'language':'en-US', 'sort_by':'popularity.desc', 'page':'1'}
@@ -22,29 +19,33 @@ For example when working with the Genre menu it will append the selected genre t
 There needs to be additional logic for determining if AND or OR combining is used via relevant | or , joiners"""
 
 
-
-class API():
+class TMDB_API:
     _PARAMS =  {'/search':{
                     '/movie':{'Query':'query', 'Include Adult':'include_adult', 'Release Year':'primary_release_year'}, 
                     '/tv':{'Query':'query', 'Incluse Adult':'include_adult', 'Release Year':'primary_release_year'},
                     '/person':{'Query':'query', 'Language':'language'}}, 
                 '/discover':{
                     '/movie':{'Include Adult':'include_adult', 'Show Video':'include_video', 'Sort By':'sort_by', 'By Cast':'with_cast', 'By Genre/s':'with_genres', 'Release Year':'primary_release_year'},
-                    '/tv':{'First Air Date':'first_air_date_year', 'Minimum Vote Average':'vote_average.gte', 'Keywords':'with_keywords', 'Genres':'with_genres'}
+                    '/tv':{'First Air Date':'first_air_date_year', 'Minimum Vote Average':'vote_average.gte', 'Keywords':'with_keywords', 'Companies':'with_companies'}
                             }
                 }
 
     _DEFAULT_PARAMS = {'include_adult':False}
-
     _RENDERED_DATA = ['title', 'release_date', 'genre_ids', 'vote_average', 'overview']
-
     _BASEURL = 'https://api.themoviedb.org/3'
+    _IMG_BASE = 'http://image.tmdb.org/t/p/'
+    _IMG_SIZE = 'w300'
+    _IMAGE = {
+    "base_url": "http://image.tmdb.org/t/p/", "secure_base_url": "https://image.tmdb.org/t/p/",
+    "backdrop":"w300","logo":"w154","poster": "w154", "profile":"w185","still":"w185" }
+
     _GENRE_MOVIE_LIST_URL = 'https://api.themoviedb.org/3/genre/movie/list'
     _GENRE_TV_LIST_URL = 'https://api.themoviedb.org/3/genre/tv/list'
 
+    """Adds the param key when using the discover mode - the key is the current app mode"""
     _DISCOVER_LOOKUP = {'Genres':'with_genres'}
 
-    def __init__(self) -> None: 
+    def __init__(self) -> None:
         self.mode = '/discover'
         self.format = '/movie'
         self.url = ''
@@ -59,13 +60,13 @@ class API():
     def prev_page(self):
         self.page = str(int(self.page)-1)
 
-    def set_mode(self, mode):
+    def change_mode(self, mode):
         if mode not in self._PARAMS:
             print('mode not found - defaulting to discover')
             mode = '/discover'
         self.mode = mode
 
-    def set_format(self, format):
+    def change_format(self, format):
         if format not in FORMATS:
             print('format not valid - setting to default /movie')
         self.format = format
@@ -74,12 +75,6 @@ class API():
     def get_valid_modes(self):
         modes = [key[1:].title() for key in self._PARAMS.keys() if self.format in self._PARAMS[key]]
         return modes
-    
-    def asterize(self, value, comparison):
-        for _ in range(len(value)):
-            if ('/'+value[_].lower()) == comparison:
-                value[_] += ' *'
-        return value
     
     def set_query(self, query):
         self.params['query'] = query
@@ -167,37 +162,19 @@ class API():
         if format: self.format = format
         if params: self.params = params
         if query: self.params['query'] = query
-        if not url: self.build_url()
-        else: self.url = url
-        return self.http_request()
+        if url: self.url = url
+        else: self.build_url()
+        return api.http_request(self.url, self.header)
 
     #Base user input around specifying the options to a mode in traditional console format 'a=this b=that'
     #This uses a space as markers to differentiate requests
     def build_url(self)->str:
         #folded_params = self.fold_params(self.params)
         folded_params = urlencode(self.params)
-        print(folded_params)
+        #print(folded_params)
         self.url = self._BASEURL + self.mode + self.format + '?' + folded_params
         #if url[-1] == '&': url = url[:-1]
         #return url
-
-    #PyCurl Send Requests
-
-    def http_request(self, postdata=None):
-        w = BytesIO()
-        c = pycurl.Curl()
-        c.setopt(c.URL, self.url)
-        c.setopt(c.HTTPHEADER, self.header)
-        c.setopt(c.WRITEDATA, w)
-        c.setopt(c.CAINFO, certifi.where())
-        if postdata: 
-            if isinstance(postdata, dict):
-                postdata = json.dumps(postdata)
-            c.setopt(c.POSTFIELDS, postdata)
-        c.perform()
-        c.close()
-        w.seek(0)
-        return json.loads(w.read().decode('utf-8'))
 
     def abbreviate_options(self, data:list):
         r = {}
@@ -238,6 +215,25 @@ class API():
                 if x != self._RENDERED_DATA[-1]: r += ' - \n'
                 r  += '\n'
 
+    #Check whether a temporary cache of genres already exists and populate self.genres
+    #TO DO - Make the validaty of genres expire after every 2 weeks
+    def init_genres(self) -> dict:
+        if not self.create_genre_files():
+            self.genres = self.load_data(GENRE_FILE)
+            return
+        genre_lookup = {'Movie':{}, 'TV':{}}
+        self.api.url = self._GENRE_MOVIE_LIST_URL
+        result = self.api.http_request()['genres']
+        genre_lookup['Movie']['name_to_id'] = {x['name']:str(x['id']) for x in result}
+        genre_lookup['Movie']['id_to_name'] = {str(x['id']):x['name'] for x in result}
+        self.api.url = self._GENRE_TV_LIST_URL
+        result = self.api.http_request()['genres']
+        genre_lookup['TV']['name_to_id'] = {x['name']:str(x['id']) for x in result}
+        genre_lookup['TV']['id_to_name'] = {str(x['id']):x['name'] for x in result}
+        self.genres = genre_lookup
+        self.api.dump_data(GENRE_FILE, genre_lookup)
+
+
     #Load data from a file
     def load_data(self, file)->json:
         if os.path.getsize(file) == 0: return
@@ -248,10 +244,3 @@ class API():
         if not data: data = self.response
         with open(file, 'w') as file:
             json.dump(data, file)
-
-    # Cache Data
-
-test = API()
-#test.run_cycle()
-#test.renderResults()
-#print(test.response)
