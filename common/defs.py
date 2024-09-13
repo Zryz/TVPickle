@@ -1,11 +1,15 @@
 #Effectively global namespaces that are used within the app
 
 #TMDB Modes
+
 MODES = {'s':'/search', 'd':'/discover'}
 FORMATS = {'m':'/movie', 't':'/tv', 'a':'/actor'}
 
-"""Reserved keys that will apply to every page on the app"""
-UNIVERSAL_CONTROLS = {'q':[exit], 'Q':[exit]}
+PAGE_STRUCTS = {'intro': ([.1,.8,.1], [None, None, None], [-1,1,-1]), 
+                'mode': ([0.25, .05, 0.65, 0.05], [None, None,[0.1, 0.27,0.27,0.26, 0.1], None],[2,0,0,2,2,2,0,0]),
+                'results': ([1], [[.5,.5]],[1,1]),
+                'discover': ([.25,.05,.45,.1,.15], [None, None,[.2,.15,.15,.15,.15,.2], [0.2,0.6,0.2], None], [2,-1,-1,0,0,0,0,-1,-1,0,-1,-1])
+                }
 
 TELEVISION = """___________
 |  _______  |
@@ -34,6 +38,15 @@ ACTOR = """    _______
   __\  ^  /__ 
  |   \_V_/   |"""
 
+SEARCH = """ ad88888ba   
+d8"     "8b  
+""      a8P  
+     ,a8P"   
+    d8"      
+    ""       
+    aa       
+    88       """
+
 
 INTRO_TITLE = """                                        ▄▄                     ▄▄          
 ███▀▀██▀▀███████▀   ▀███▀   ▀███▀▀▀██▄  ██        ▀███       ▀███          
@@ -45,7 +58,6 @@ INTRO_TITLE = """                                        ▄▄                 
    ▄████▄        ██         ▄████▄    ▄████▄█████▀▄████▄ ██▄▄▄████▄ ▀█████▀
                                                                            
                                                                            """
-
 
 
 HEADER_TITLE = """░▀█▀░█▒█░░▒█▀▄░█░▄▀▀░█▄▀░█▒░▒██▀

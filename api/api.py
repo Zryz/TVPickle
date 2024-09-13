@@ -1,6 +1,9 @@
 import json, os, api
 from urllib.parse import urlencode
 
+from .http import http_request
+from common.paths import check_for_file, load_data, dump_data, GENRE_FILE
+
 
 #URL Helpers
 DEFAULTS = {'include_adult':'false', 'language':'en-US', 'sort_by':'popularity.desc', 'page':'1'}
@@ -25,8 +28,8 @@ class TMDB_API:
                     '/tv':{'Query':'query', 'Incluse Adult':'include_adult', 'Release Year':'primary_release_year'},
                     '/person':{'Query':'query', 'Language':'language'}}, 
                 '/discover':{
-                    '/movie':{'Include Adult':'include_adult', 'Show Video':'include_video', 'Sort By':'sort_by', 'By Cast':'with_cast', 'By Genre/s':'with_genres', 'Release Year':'primary_release_year'},
-                    '/tv':{'First Air Date':'first_air_date_year', 'Minimum Vote Average':'vote_average.gte', 'Keywords':'with_keywords', 'Companies':'with_companies'}
+                    '/movie':{'Include Adult':'include_adult', 'Show Video':'include_video', 'Sort By':'sort_by', 'By Cast':'with_cast', 'By Genre/s':'with_genres', 'Release Year':'primary_release_year', 'Released Before':'primary_release_date.lte', 'Released After':'primary_release_date.gte'},
+                    '/tv':{'First Air Date':'first_air_date_year', 'First Aired Before':'first_air_date.lte', 'First Aired After':'first_air_date.gte','Minimum Vote Average':'vote_average.gte', 'Keywords':'with_keywords', 'Companies':'with_companies'}
                             }
                 }
 
@@ -53,12 +56,31 @@ class TMDB_API:
         self.page = '1'
         self.response = None
         self.header = ['accept:application/json','Authorization: Bearer ' + os.environ['API_TOKEN']]
+        self.title_ref = 'title'
 
     def next_page(self):
         self.page = str(int(self.page)+1)
     
     def prev_page(self):
         self.page = str(int(self.page)-1)
+
+    def add_to_params(self, param_key, value, join_logic='|'):
+        if param_key not in self.params:
+            self.params[param_key] = value
+        else:
+            current = self.params[param_key]
+            if current.count(',') > 0:
+                housing = current.split(',')
+                #If a comma we switch to that for the join method later
+                join_logic = ','
+            elif current.count('|') > 0:
+                housing = current.split('|')
+            else:
+                housing = [current]
+            #Check for duplicates
+            if value not in housing:
+                housing.append(value)
+            self.params[param_key] = join_logic.join(housing)
 
     def change_mode(self, mode):
         if mode not in self._PARAMS:
@@ -164,7 +186,7 @@ class TMDB_API:
         if query: self.params['query'] = query
         if url: self.url = url
         else: self.build_url()
-        return api.http_request(self.url, self.header)
+        return http_request(self.url, self.header)
 
     #Base user input around specifying the options to a mode in traditional console format 'a=this b=that'
     #This uses a space as markers to differentiate requests
@@ -187,6 +209,13 @@ class TMDB_API:
                 i+=1
             continue
         return r
+    
+    def generate_image(self, result):
+        #Fetch the poster_path image data from a result and return it's raw image
+        if not result['poster_path']: return
+        url = TMDB_API._IMG_BASE + TMDB_API._IMG_SIZE + result['poster_path']
+        image = http_request(url, direct=True)
+        return image
 
     def overide_url(self, url):
         self.url = url
@@ -218,29 +247,17 @@ class TMDB_API:
     #Check whether a temporary cache of genres already exists and populate self.genres
     #TO DO - Make the validaty of genres expire after every 2 weeks
     def init_genres(self) -> dict:
-        if not self.create_genre_files():
-            self.genres = self.load_data(GENRE_FILE)
-            return
+        if not check_for_file(GENRE_FILE):
+            r = load_data(GENRE_FILE)
+            return r
         genre_lookup = {'Movie':{}, 'TV':{}}
-        self.api.url = self._GENRE_MOVIE_LIST_URL
-        result = self.api.http_request()['genres']
+        self.url = self._GENRE_MOVIE_LIST_URL
+        result = http_request()['genres']
         genre_lookup['Movie']['name_to_id'] = {x['name']:str(x['id']) for x in result}
         genre_lookup['Movie']['id_to_name'] = {str(x['id']):x['name'] for x in result}
-        self.api.url = self._GENRE_TV_LIST_URL
-        result = self.api.http_request()['genres']
+        self.url = self._GENRE_TV_LIST_URL
+        result = http_request()['genres']
         genre_lookup['TV']['name_to_id'] = {x['name']:str(x['id']) for x in result}
         genre_lookup['TV']['id_to_name'] = {str(x['id']):x['name'] for x in result}
-        self.genres = genre_lookup
-        self.api.dump_data(GENRE_FILE, genre_lookup)
-
-
-    #Load data from a file
-    def load_data(self, file)->json:
-        if os.path.getsize(file) == 0: return
-        with open(file, 'r') as local:
-            return json.load(local)
-
-    def dump_data(self, file, data=None):
-        if not data: data = self.response
-        with open(file, 'w') as file:
-            json.dump(data, file)
+        dump_data(GENRE_FILE, genre_lookup)
+        return genre_lookup
