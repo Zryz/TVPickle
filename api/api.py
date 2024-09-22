@@ -1,4 +1,4 @@
-import json, os, api
+import json, os, api, logging
 from urllib.parse import urlencode
 
 from .http import http_request
@@ -16,6 +16,9 @@ ID_LOOKUP = { '/discover':{
 ID_SIMPLE = {'with_cast':'/person', 'with_genres':'/'}
 
 FORMATS = ['/tv', '/person', '/movie']
+
+GENRE_MOVIE_LIST_URL = 'https://api.themoviedb.org/3/genre/movie/list'
+GENRE_TV_LIST_URL = 'https://api.themoviedb.org/3/genre/tv/list'
 
 """This can be used by Menu elements to understand what query key their data is setting.
 For example when working with the Genre menu it will append the selected genre to the with_genres.
@@ -42,21 +45,27 @@ class TMDB_API:
     "base_url": "http://image.tmdb.org/t/p/", "secure_base_url": "https://image.tmdb.org/t/p/",
     "backdrop":"w300","logo":"w154","poster": "w154", "profile":"w185","still":"w185" }
 
-    _GENRE_MOVIE_LIST_URL = 'https://api.themoviedb.org/3/genre/movie/list'
-    _GENRE_TV_LIST_URL = 'https://api.themoviedb.org/3/genre/tv/list'
-
     """Adds the param key when using the discover mode - the key is the current app mode"""
     _DISCOVER_LOOKUP = {'Genres':'with_genres'}
 
     def __init__(self) -> None:
-        self.mode = '/discover'
-        self.format = '/movie'
+        self.logger = logging.getLogger(self.__class__.__name__)
+        if not os.environ.get('API_TOKEN'):
+            api_token = input('No API_TOKEN found. Please provide this now: ')
+        else:
+            api_token = os.environ['API_TOKEN']
+
+        self.api_token = api_token
+        self.header = ['accept:application/json','Authorization: Bearer ' + self.api_token]
+
+        self.format = '/movie' #Tv or Movie content format
+        self.mode = '/discover' #Api mode
+        
         self.url = ''
         self.params = {}
         self.page = '1'
-        self.response = None
-        self.header = ['accept:application/json','Authorization: Bearer ' + os.environ['API_TOKEN']]
-        self.title_ref = 'title'
+
+        self.title_ref = 'title' #tmdb uses title for movies and name for tv shows
 
     def next_page(self):
         self.page = str(int(self.page)+1)
@@ -64,29 +73,23 @@ class TMDB_API:
     def prev_page(self):
         self.page = str(int(self.page)-1)
 
-    def add_to_params(self, param_key, value, join_logic='|'):
-        if param_key not in self.params:
-            self.params[param_key] = value
+    def add_to_params(self, key, value, join_logic='|'):
+        if key not in self.params:
+            self.params[key] = value
         else:
-            current = self.params[param_key]
+            current = self.params[key]
             if current.count(',') > 0:
                 housing = current.split(',')
-                #If a comma we switch to that for the join method later
                 join_logic = ','
             elif current.count('|') > 0:
                 housing = current.split('|')
             else:
                 housing = [current]
-            #Check for duplicates
+
             if value not in housing:
                 housing.append(value)
-            self.params[param_key] = join_logic.join(housing)
 
-    def change_mode(self, mode):
-        if mode not in self._PARAMS:
-            print('mode not found - defaulting to discover')
-            mode = '/discover'
-        self.mode = mode
+            self.params[key] = join_logic.join(housing)
 
     def change_format(self, format):
         if format not in FORMATS:
@@ -151,6 +154,7 @@ class TMDB_API:
         for _ in range(len(response)):
             if _ == return_size: break
             r.append(response[_]['id'])
+
         self.mode, self.format, self.params = save_state[0], save_state[1], save_state[2]
 
         if logic_map == 'or': return "|".join(r)
@@ -193,10 +197,7 @@ class TMDB_API:
     def build_url(self)->str:
         #folded_params = self.fold_params(self.params)
         folded_params = urlencode(self.params)
-        #print(folded_params)
         self.url = self._BASEURL + self.mode + self.format + '?' + folded_params
-        #if url[-1] == '&': url = url[:-1]
-        #return url
 
     def abbreviate_options(self, data:list):
         r = {}
@@ -222,42 +223,17 @@ class TMDB_API:
 
     def api_set_mode(self, mode):
         self.mode = mode
-    
-    def readResponse(self, params=None, response=None):
-        if not response: return self.response
-        else:
-            if isinstance(params, list):
-                for x in params:
-                    response = response[x]
-        return response
 
-    def api_render_results(self):
-        r = ''
-        if not self.response: return
-        for response in self.response:
-            for x in self._RENDERED_DATA:
-                v = response[x]
-                if not isinstance(v, str):
-                    v = str(v)
-                r += '\n'
-                r += v
-                if x != self._RENDERED_DATA[-1]: r += ' - \n'
-                r  += '\n'
 
-    #Check whether a temporary cache of genres already exists and populate self.genres
-    #TO DO - Make the validaty of genres expire after every 2 weeks
     def init_genres(self) -> dict:
-        if not check_for_file(GENRE_FILE):
-            r = load_data(GENRE_FILE)
-            return r
-        genre_lookup = {'Movie':{}, 'TV':{}}
-        self.url = self._GENRE_MOVIE_LIST_URL
-        result = http_request()['genres']
-        genre_lookup['Movie']['name_to_id'] = {x['name']:str(x['id']) for x in result}
-        genre_lookup['Movie']['id_to_name'] = {str(x['id']):x['name'] for x in result}
-        self.url = self._GENRE_TV_LIST_URL
-        result = http_request()['genres']
-        genre_lookup['TV']['name_to_id'] = {x['name']:str(x['id']) for x in result}
-        genre_lookup['TV']['id_to_name'] = {str(x['id']):x['name'] for x in result}
-        dump_data(GENRE_FILE, genre_lookup)
+        genre_lookup = {'movie':{}, 'tv':{}}
+
+        result = http_request(GENRE_MOVIE_LIST_URL, header=self.header)['genres']
+        genre_lookup['movie']['name_to_id'] = {x['name']:str(x['id']) for x in result}
+        genre_lookup['movie']['id_to_name'] = {str(x['id']):x['name'] for x in result}
+
+        result = http_request(GENRE_TV_LIST_URL, header=self.header)['genres']
+        genre_lookup['tv']['name_to_id'] = {x['name']:str(x['id']) for x in result}
+        genre_lookup['tv']['id_to_name'] = {str(x['id']):x['name'] for x in result}
+
         return genre_lookup

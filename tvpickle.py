@@ -1,48 +1,43 @@
 import curses, pyui, logging
 
-from time import sleep
-
+from logging.handlers import RotatingFileHandler
 from api.api import TMDB_API
-from common.defs import INTRO_TITLE, CINEMA, SEARCH, PAGE_STRUCTS, TELEVISION
-from common.controls import tvpickle_controls
+from common.defs import CINEMA, TELEVISION
 from common.elements import result_text_render
 
 from pyui.ascii.fonts import BLACK_7, BLOCK_ALPHABET, TINY, TOY_BLOCKS
-from pyui.test.paths import dump_object
 
+#Api caller which defines what mode / state app is in
 api = TMDB_API()
+
+#Prevent balooning of log file
+log_handler = RotatingFileHandler(
+    'tvpickle.log',  # Log file name
+    maxBytes=5*1024*1024,  # Max file size: 5 MB
+    backupCount=3  # Keep 3 backup files
+)
 
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        #logging.StreamHandler(),  # Outputs logs to the console
-        logging.FileHandler('app.log'),  # Logs to a file
-    ]
+    handlers=[log_handler]
 )
 
-#Engine that holds together moving between modes and selection
 class TVPickle():
     def __init__(self) -> None:
-        #It's best to instantiate the UI within the app for easier class resolution 
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.ui = pyui.PYUI(self)
-
-        self.refresh_screen = True
-        self.app_mode = '#'
+        self.app_mode: str
 
         """API Initialisation"""
+        
         self.genres = api.init_genres()
-
-        """CONTROLS"""
-        #Main application controls
-        self.ui.controls.set_controls_db(tvpickle_controls(self))
-        #Quit keys to exit app from anywhere
-        self.ui.controls.set_quit_keys('q', 'Q')
-
+        
         "Init App UI"
+        self.ui = pyui.PYUI(self)
         self.build_ui()
+        self.ui.controls.set_controls_db(tvpickle_controls(self))
 
+        self.ui.controls.set_quit_keys('q', 'Q')
         self.ui.controls.select('intro')
 
         self.cycle()
@@ -50,10 +45,13 @@ class TVPickle():
     def build_ui(self):
         """Create the application pages and the layouts, numbers of windows and borders for app"""
         self.ui.define_page_struct('intro', ([.08,.19,.55,.1,.08], [None, [.15,.7,.15], [.15,.7,.15], [.15,.7,.15], None], [-1,-1,0,-1,-1,0,-1,-1,0,-1,-1]))
+        self.ui.define_page_struct('format', ([0.25, .05, 0.65, 0.05], [None, None,[0.1, 0.4,0.4,0.1], None],[2,-1,-1,2,2,-1,-1]))
         self.ui.define_page_struct('mode', ([0.25, .05, 0.65, 0.05], [None, None,[0.1, 0.4,0.4,0.1], None],[2,-1,-1,2,2,-1,-1]))
         self.ui.define_page_struct('discover', ([.20,.1,.45,.1,.15], [None, None,[.2,.15,.15,.15,.15,.2], [0.2,0.6,0.2], None], [2,-1,-1,0,0,0,0,-1,-1,0,-1,-1]))
-        self.ui.define_page_struct('results', ([.2,.15,.45,.2], [[.6, None],[.6], [.2,.2,.2], [.6]], [0,0,1,2,2,2,2,0,-1,0], 2))
+        self.ui.define_page_struct('results', ([.2,.15,.45,.2], [[.6, None],[.6], [.2,.2,.2], [.6]], [0,0,1,2,2,2,2,0,-1,0], 3))
         self.ui.define_page_struct('image', ([.1,.8,.1], [None, None, None], [-1, 0, -1]))
+
+        self.ui.define_window_properties('format', 4, {'bg':(10,90,210), 'fg':(255,0,255)})
 
         """Set the starting page"""
         self.ui.select_page('intro')
@@ -65,65 +63,22 @@ class TVPickle():
         self.ui.content.set('intro', 5, pyui.UIImage("img/appicon.jpg", True))
         self.ui.content.set('intro', 8, pyui.Title('Press Space To Begin', BLOCK_ALPHABET))
 
-        self.ui.content.set('mode', 0, pyui.Title('Choose A Mode', TOY_BLOCKS, rgb=(190, 20,1), y_centre=True))
-        self.ui.content.set('mode', 3, pyui.Title(TELEVISION) + '' + pyui.Title('TV', BLACK_7) + '\n' + pyui.Title('Press T', BLOCK_ALPHABET))
-        #self.ui.content.set('mode', 3, pyui.UIImage("img/appicon.png"))
-        #self.ui.content.set('mode', 4, pyui.UIImage("img/danny.jpg"))
-        self.ui.content.set('mode', 4, pyui.Title(CINEMA) + '' + pyui.Title('Movie', BLACK_7, rgb=(160,50,200)) + '\n' + pyui.Title('Press M',BLOCK_ALPHABET))
-       # self.ui.content.set('mode', 5, pyui.Title(SEARCH) + '' + pyui.Title('Search', BLACK_7) + '\n' + pyui.Title('Press S', BLOCK_ALPHABET, (25,66,200)))
-    
-       #Based on current state relay what query parameters can be set
-    def get_query_options(self)->str:
-        render_text = ""  
-        menu = api._PARAMS
-        val = [[key, val] for key, val in menu[api.mode][api.format].items()]
-        return '\n'.join([item[0] +": " + item[1] for item in val])
-    
-    def build_query_options(self):
-        form = self.ui.format_text
-        panel_content = [form()]
+        self.ui.content.set('format', 0, pyui.Title('Choose A Mode', TOY_BLOCKS, rgb=(190, 20,1), y_centre=True))
+        self.ui.content.set('format', 3, [pyui.UIImage('img/tv.jpg', center=True), pyui.Title('Press T', BLACK_7, rgb=(34,56,120), write_line=3)])
+        self.ui.content.set('format', 4, [pyui.UIImage('img/movie.jpg', center=True), pyui.Title('Press M',BLACK_7, rgb=(120,38,55),write_line=3)])
 
-    def init_actor_mode(self):
-        self.app_mode = 'Actor'
-        self.select_screen('query')
-
-    def parse_input(self, input):
-        return self.page_control_logic[self.current_page][input]
-
-    #Change to the query mode which builds the user inputs into API requests
-    def init_discover_mode(self, app_mode):
+    def set_format(self, app_mode):
         self.app_mode = app_mode
-        api.mode = '/discover'
-        match app_mode:
-            case "TV":
+        self.api_by_format()
+
+    def api_by_format(self):
+        match self.app_mode:
+            case "tv":
                 api.format = '/tv'
                 api.title_ref = 'name'
-            case "Movie":
+            case "movie":
                 api.format = '/movie'
                 api.title_ref = 'title'
-            case "Actor":
-                api.mode = '/search'
-                api.format = '/person'
-        #Apply the top banner title
-        self.ui.content.set('discover', 0, pyui.Title(app_mode + ' Mode', BLACK_7, y_centre=True))
-        #Convert the dictionary into a list menu - using only Keys
-        genre_menu = pyui.Menu('Genres',self.genres[app_mode]['name_to_id'],display='key')
-        api_menu = pyui.Menu('Search Params', api._PARAMS[api.mode][api.format], display='key')
-
-        self.ui.controls.attach_binding('genre_menu', '[', genre_menu.prev)
-        self.ui.controls.attach_binding('genre_menu', ']', genre_menu.next)
-        self.ui.controls.attach_binding('genre_menu', ' ', [self.select_api_item, {'menu':genre_menu}])
-        self.ui.controls.attach_binding('genre_menu', 'j', self.build_result_page)
-
-        if self.app_mode != 'Actor':
-            #Build genres menu of content
-            self.ui.content.set('discover', 3, genre_menu)
-            self.ui.content.set('discover', 4, api_menu)
-            self.ui.content.set('discover', 5, api.params)
-
-        self.ui.select_page('discover')
-
-        self.ui.controls.select('discover')
 
     def select_api_item(self, menu:pyui.Menu):
         api.add_to_params('with_genres', menu.get_value())
@@ -165,6 +120,29 @@ class TVPickle():
         self.ui.content.set(p_name, 1, pyui.UIImage(api.generate_image(self.current_result()), True))
         self.ui.content.set(p_name, 6, pyui.Title('Use left and right to switch between results', TINY))
 
+    def build_discover_page(self):
+        self.ui.content.set('discover', 0, pyui.Title(self.app_mode + ' Mode', BLACK_7, y_centre=True))
+        self.build_genre_menu()
+        self.build_api_menu()
+
+        self.ui.select_page('discover')
+        self.ui.controls.select('discover')
+
+    def build_api_menu(self):
+        api_menu = pyui.Menu('Search Params', api._PARAMS[api.mode][api.format], display='key')
+        self.ui.content.set('discover', 4, api_menu)
+        self.ui.content.set('discover', 5, api.params)
+
+    def build_genre_menu(self):
+        genre_menu = pyui.Menu('Genres',self.genres[self.app_mode]['name_to_id'],display='key', title_font=BLACK_7, text_font=BLOCK_ALPHABET)
+
+        self.ui.controls.attach_binding('genre_menu', '[', genre_menu.prev)
+        self.ui.controls.attach_binding('genre_menu', ']', genre_menu.next)
+        self.ui.controls.attach_binding('genre_menu', ' ', [self.select_api_item, {'menu':genre_menu}])
+        self.ui.controls.attach_binding('genre_menu', 'j', self.build_result_page)
+
+        self.ui.content.set('discover', 3, genre_menu)
+
     def build_result_page(self):
         
         self.results = self.build_against_api()
@@ -178,8 +156,8 @@ class TVPickle():
         else:
             self.update_result_ui()
 
-            self.ui.controls.attach_binding('results', 'd', self.next_result)
-            self.ui.controls.attach_binding('results', 'f', self.prev_result)
+            self.ui.controls.attach_binding('results', curses.KEY_RIGHT, self.next_result)
+            self.ui.controls.attach_binding('results', curses.KEY_LEFT, self.prev_result)
         
         self.ui.controls.select('results')
         self.ui.select_page('results')
@@ -201,6 +179,34 @@ class TVPickle():
                     task[0]()
                 i+=1 
 
+""" App Controls """
+
+def tvpickle_controls(tvpickle:TVPickle)->dict:
+    return {
+        'universal':{
+                    'a': [ [tvpickle.ui.pause_decoration]],
+                    's': [[ tvpickle.ui.restart_decoration]]
+                },
+        'intro':{
+                    ' ': [ [tvpickle.ui.select_page, {'name':'format'}], [tvpickle.ui.controls.select, {'control_name':'format'}]],
+                },
+
+        'discover':{
+                    'g':[[tvpickle.ui.controls.select,{'control_name':'genre_menu'}]]
+                },
+
+        'format':{
+                    'm':[[tvpickle.set_format, {'app_mode':'movie'}], [tvpickle.build_discover_page]], 
+                    'M':[[tvpickle.set_format, {'app_mode':'movie'}]], 
+                    't':[[tvpickle.set_format, {'app_mode':'tv'}]],
+                    'T':[[tvpickle.set_format, {'app_mode':'tv'}]] 
+                },
+
+        'results':{ 
+                    'left':[[tvpickle.prev_result]], 
+                    'right':[[tvpickle.next_result]]
+                }      
+        }
 
 def run():
     tv = TVPickle()

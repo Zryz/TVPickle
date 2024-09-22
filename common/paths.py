@@ -35,5 +35,8 @@ def load_data(file)->json:
         return json.load(local)
 
 def dump_data(file, data=None):
+    if not check_for_file(file):
+        with open(file, 'w') as file:
+            file.write('')
     with open(file, 'w') as file:
         json.dump(data, file)
