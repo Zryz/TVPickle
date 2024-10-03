@@ -47,8 +47,8 @@ class TVPickle():
         self.ui.define_page_struct('intro', ([.08,.19,.55,.1,.08], [None, [.15,.7,.15], [.15,.7,.15], [.15,.7,.15], None], [-1,-1,0,-1,-1,0,-1,-1,0,-1,-1]))
         self.ui.define_page_struct('format', ([0.25, .05, 0.65, 0.05], [None, None,[0.1, 0.4,0.4,0.1], None],[2,-1,-1,2,2,-1,-1]))
         self.ui.define_page_struct('mode', ([0.25, .05, 0.65, 0.05], [None, None,[0.1, 0.4,0.4,0.1], None],[2,-1,-1,2,2,-1,-1]))
-        self.ui.define_page_struct('discover', ([.20,.1,.45,.1,.15], [None, None,[.2,.15,.15,.15,.15,.2], [0.2,0.6,0.2], None], [2,-1,-1,0,0,0,0,-1,-1,0,-1,-1]))
-        self.ui.define_page_struct('results', ([.2,.15,.45,.2], [[.6, None],[.6], [.2,.2,.2], [.6]], [0,0,1,2,2,2,2,0,-1,0], 3))
+        self.ui.define_page_struct('discover', ([.15,.05,.7,.1], [None, None,[.2,.15,.15,.15,.15,.2], [0.2,0.6,0.2], None], [2,-1,-1,0,0,0,0,-1,-1,0,-1,-1]))
+        self.ui.define_page_struct('results', ([.1,.3,.4,.2], [[.6, None],[.6], [.2,.2,.2], [.6]], [0,0,1,2,2,2,2,0,-1,0], 3))
         self.ui.define_page_struct('image', ([.1,.8,.1], [None, None, None], [-1, 0, -1]))
 
         self.ui.define_window_properties('format', 4, {'bg':(10,90,210), 'fg':(255,0,255)})
@@ -113,7 +113,7 @@ class TVPickle():
     def update_result_ui(self):
         p_name = 'results'
         self.ui.content.clear(p_name)
-        self.ui.content.set(p_name, 0, pyui.Title('Results', TOY_BLOCKS, (230,20,10), y_centre=True))
+        self.ui.content.set(p_name, 0, pyui.Title('Results', BLOCK_ALPHABET, (230,20,10), y_centre=True))
         self.ui.content.set(p_name, 2, pyui.Title(self.current_result()[api.title_ref], BLACK_7, (120,23,233), y_centre=True))
         self.ui.content.set(p_name, 4, pyui.Title('Info', BLOCK_ALPHABET , (0,120,120),False))
         self.ui.content.set(p_name, 4, result_text_render(self.current_result()))
